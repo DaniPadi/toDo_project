@@ -5,6 +5,8 @@ from ..models.task import serialize_task
 
 task_bp = Blueprint("tasks", __name__)
 
+
+hola = "Jenkins"
 @task_bp.route("/", methods=["GET"])
 def get_tasks():
     tasks = [serialize_task(task) for task in db.tasks.find()]
@@ -41,6 +43,8 @@ def update_task(task_id):
             return jsonify({"msg": "task updated"}), 301
     
     return jsonify({"error:" "task not Found"}), 404
+
+
 
 
 @task_bp.route("/<task_id>", methods=["DELETE"])
