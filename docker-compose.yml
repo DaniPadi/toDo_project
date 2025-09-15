@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
     networks:
       app_net:
-        ipv4_address: 172.28.0.2   # IP fija
+        ipv4_address: 172.30.0.2   # IP fija
 
   back:
     build: ./back
@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     environment:
       # Como pediste IPs: apuntamos al IP del contenedor de Mongo
-      MONGO_URI: mongodb://172.28.0.2:27017
+      MONGO_URI: mongodb://172.30.0.2:27017
       MONGO_DB: todo_db
       FLASK_RUN_HOST: 0.0.0.0
       FLASK_RUN_PORT: 8000
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
     networks:
       app_net:
-        ipv4_address: 172.28.0.3   # IP fija
+        ipv4_address: 172.30.0.3   # IP fija
 
   front:
     image: nginx:alpine
@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
     networks:
       app_net:
-        ipv4_address: 172.28.0.4   # IP fija
+        ipv4_address: 172.30.0.4   # IP fija
 
 volumes:
   mongodata:
