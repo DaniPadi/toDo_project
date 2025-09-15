@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>To-Do • Flask + Mongo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root { --card-max: 880px; }
+    body {
+      background: radial-gradient(1200px 400px at 20% -10%, #e8f0ff 0, transparent 60%),
+                  radial-gradient(900px 300px at 90% 0%, #e9fff4 0, transparent 60%),
+                  #f6f7fb;
+      min-height: 100dvh;
+    }
+    .app-wrap { max-width: var(--card-max); }
+    .shadow-soft { box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+    .task-title.editing { background: #fff7cc; padding: .15rem .35rem; border-radius: .25rem; }
+    .line-through { text-decoration: line-through; opacity: .75; }
+    .pointer { cursor: pointer; }
+    .sticky-actions { position: sticky; top: .5rem; z-index: 2; }
+    .list-group-item { transition: background-color .2s ease; }
+    .list-group-item:hover { background-color: #fafbff; }
+    .spinner-sm {
+      width: 1rem; height: 1rem; border-width: .15rem;
+      vertical-align: -2px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar bg-body-tertiary border-bottom shadow-sm">
+    <div class="container app-wrap">
+      <span class="navbar-brand fw-semibold"><i class="bi bi-check2-square me-2"></i>To-Do</span>
+      <span class="small text-muted">Flask + Mongo • UI</span>
+    </div>
+  </nav>
+
+  <main class="container app-wrap py-4">
+    <div class="card shadow-soft border-0">
+      <div class="card-body p-4">
+        <!-- header -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+          <h1 class="h4 m-0">Tareas</h1>
+          <div class="sticky-actions d-flex gap-2">
+            <span class="badge text-bg-light border"><span id="count-total">0</span> total</span>
+            <span class="badge text-bg-success-subtle border"><span id="count-done">0</span> hechas</span>
+            <span class="badge text-bg-warning-subtle border"><span id="count-todo">0</span> pendientes</span>
+          </div>
+        </div>
+
+        <!-- add form -->
+        <form id="form-add" class="input-group mb-3" autocomplete="off">
+          <span class="input-group-text"><i class="bi bi-plus-lg"></i></span>
+          <input id="input-title" class="form-control" type="text" placeholder="Escribe una nueva tarea y presiona Enter…" required />
+          <button class="btn btn-primary" type="submit">
+            <span class="d-none d-sm-inline">Agregar</span>
+            <i class="bi bi-send d-sm-none"></i>
+          </button>
+        </form>
+
+        <!-- filters -->
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-12 col-md-6">
+            <div class="btn-group w-100" role="group" aria-label="Filtro de estado">
+              <input type="radio" class="btn-check" name="filter-status" id="status-all" value="all" checked>
+              <label class="btn btn-outline-secondary" for="status-all"><i class="bi bi-list-task me-1"></i> Todas</label>
+
+              <input type="radio" class="btn-check" name="filter-status" id="status-open" value="open">
+              <label class="btn btn-outline-secondary" for="status-open"><i class="bi bi-circle me-1"></i> Pendientes</label>
+
+              <input type="radio" class="btn-check" name="filter-status" id="status-done" value="done">
+              <label class="btn btn-outline-secondary" for="status-done"><i class="bi bi-check2-circle me-1"></i> Completadas</label>
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input id="input-search" type="search" class="form-control" placeholder="Buscar por título…" />
+              <button id="btn-clear-search" class="btn btn-outline-secondary" type="button" title="Limpiar búsqueda">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- list -->
+        <ul id="list" class="list-group mb-3"></ul>
+
+        <!-- pagination -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="small text-muted" id="page-hint">Página 1</div>
+          <div class="btn-group">
+            <button id="btn-prev" class="btn btn-outline-secondary" type="button"><i class="bi bi-chevron-left"></i> Anterior</button>
+            <button id="btn-next" class="btn btn-outline-secondary" type="button">Siguiente <i class="bi bi-chevron-right"></i></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="text-center text-muted small mt-4">
+      Construido con Bootstrap 5 • Funciona con <code>/api/tasks</code>
+    </p>
+  </main>
+
+  <!-- Bootstrap JS (para algunos componentes) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
+
+  <script>
+    // ====== Config ======
+    const API = {
+      base: 'http://127.0.0.1:8000/api/tasks',
+      list: async (params = {}) => {
+        const qs = new URLSearchParams(params).toString();
+        const url = qs ? `${API.base}/?${qs}` : `${API.base}/`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Error al listar tareas');
+        return r.json();
+      },
+      create: async (title) => {
+        const r = await fetch(`${API.base}/`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ title })
+        });
+        if (!r.ok) throw new Error('No se pudo crear la tarea');
+        return r.json();
+      },
+      update: async (id, payload) => {
+        const r = await fetch(`${API.base}/${id}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (!r.ok) throw new Error('No se pudo actualizar la tarea');
+        return r.json();
+      },
+      del: async (id) => {
+        const r = await fetch(`${API.base}/${id}`, { method: 'DELETE' });
+        if (!r.ok && r.status !== 204) throw new Error('No se pudo eliminar');
+        return true;
+      }
+    };
+
+    // ====== Estado UI ======
+    const state = {
+      // servidor: si tu API soporta skip/limit/filters, los usamos
+      serverPagination: true,
+      pageSize: 10,
+      skip: 0,
+      total: 0,
+      items: [],         // items mostrados
+      cacheAll: null,    // si el servidor no pagina, guardamos todo y paginamos en cliente
+      q: '',
+      status: 'all',     // all | open | done
+      loading: false
+    };
+
+    // ====== Utilidades ======
+    const $ = (s, root = document) => root.querySelector(s);
+    const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
+    const showToast = (msg, type = 'info') => {
+      const alert = document.createElement('div');
+      alert.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3 shadow`;
+      alert.style.zIndex = 1080;
+      alert.textContent = msg;
+      document.body.appendChild(alert);
+      setTimeout(() => alert.remove(), 2200);
+    };
+    const setLoading = (isLoading) => {
+      state.loading = isLoading;
+      $('#form-add button').disabled = isLoading;
+      $('#btn-prev').disabled = isLoading || state.skip <= 0;
+      $('#btn-next').disabled = isLoading || (state.serverPagination && (state.skip + state.pageSize >= state.total));
+      $('#list').innerHTML = isLoading
+        ? `<li class="list-group-item text-center py-4">
+             <div class="spinner-border spinner-sm text-primary me-2" role="status"></div>
+             Cargando…
+           </li>`
+        : $('#list').innerHTML;
+    };
+
+    // ====== Render ======
+    function renderList(items) {
+      const ul = $('#list');
+      if (!items.length) {
+        ul.innerHTML = `<li class="list-group-item text-center text-muted py-4">
+          <i class="bi bi-inbox me-1"></i> No hay tareas para mostrar.
+        </li>`;
+        return;
+      }
+      ul.innerHTML = items.map(t => {
+        const checked = t.completed ? 'checked' : '';
+        const titleCls = 'task-title ms-2 ' + (t.completed ? 'line-through' : '');
+        return `
+          <li class="list-group-item d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center flex-grow-1">
+              <input class="form-check-input me-2 toggle" type="checkbox" data-id="${t.id}" ${checked}>
+              <span class="${titleCls}" data-id="${t.id}" title="Doble clic para editar">${escapeHtml(t.title)}</span>
+            </div>
+            <div class="ms-2 d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary edit" data-id="${t.id}" title="Editar título">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger del" data-id="${t.id}" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </li>`;
+      }).join('');
+    }
+
+    function updateCounters(allItems) {
+      const total = allItems.length;
+      const done = allItems.filter(x => x.completed).length;
+      const todo = total - done;
+      $('#count-total').textContent = total;
+      $('#count-done').textContent = done;
+      $('#count-todo').textContent = todo;
+
+      const page = Math.floor(state.skip / state.pageSize) + 1;
+      const pages = Math.max(1, Math.ceil((state.total || total) / state.pageSize));
+      $('#page-hint').textContent = `Página ${Math.min(page, pages)} de ${pages}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, s => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[s]));
+    }
+
+    // ====== Carga de datos ======
+    async function load() {
+      setLoading(true);
+      try {
+        // Intento: pedir al servidor con filtros/paginación
+        const params = buildQueryParams();
+        let data = await API.list(params);
+
+        // Soportar ambos formatos: array simple o {items,total,skip,limit}
+        let items, total;
+        if (Array.isArray(data)) {
+          // servidor SIN paginación: guardamos caché y paginamos en cliente
+          state.serverPagination = false;
+          state.cacheAll = filterClientSide(data, state.q, state.status);
+          total = state.cacheAll.length;
+          items = state.cacheAll.slice(state.skip, state.skip + state.pageSize);
+        } else {
+          state.serverPagination = true;
+          items = data.items || [];
+          total = Number(data.total ?? items.length);
+        }
+
+        state.items = items;
+        state.total = total;
+
+        renderList(items);
+        updateCounters(state.serverPagination ? items : (state.cacheAll || items));
+        $('#btn-prev').disabled = state.loading || state.skip <= 0;
+        $('#btn-next').disabled = state.loading || (state.serverPagination
+          ? (state.skip + state.pageSize >= state.total)
+          : (state.skip + state.pageSize >= (state.cacheAll?.length || 0)));
+      } catch (e) {
+        console.error(e);
+        showToast(e.message || 'Error al cargar', 'danger');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function buildQueryParams() {
+      const params = { skip: state.skip, limit: state.pageSize };
+      if (state.q) params.q = state.q;
+      if (state.status === 'open') params.completed = 'false';
+      if (state.status === 'done') params.completed = 'true';
+      return params;
+    }
+
+    function filterClientSide(all, q, status) {
+      let res = all.slice();
+      if (q) {
+        const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        res = res.filter(x => rx.test(x.title || ''));
+      }
+      if (status === 'open') res = res.filter(x => !x.completed);
+      if (status === 'done') res = res.filter(x => x.completed);
+      return res.sort((a,b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1)); // pendientes primero
+    }
+
+    // ====== Acciones ======
+    async function onAdd(e) {
+      e.preventDefault();
+      const input = $('#input-title');
+      const title = input.value.trim();
+      if (!title) return;
+      try {
+        await API.create(title);
+        input.value = '';
+        // Regresar a la primera página para ver la nueva (servidor suele devolver orden desc)
+        state.skip = 0;
+        await load();
+        showToast('Tarea creada', 'success');
+      } catch (e) {
+        showToast(e.message || 'No se pudo crear', 'danger');
+      }
+    }
+
+    async function onToggle(id) {
+      try {
+        const item = (state.serverPagination ? state.items : (state.cacheAll || [])).find(x => x.id === id);
+        if (!item) return;
+        await API.update(id, { title: item.title, completed: !item.completed });
+        await load();
+      } catch (e) {
+        showToast('No se pudo actualizar', 'danger');
+      }
+    }
+
+    async function onDelete(id) {
+      if (!confirm('¿Eliminar esta tarea?')) return;
+      try {
+        await API.del(id);
+        // Mantener la página actual; si queda vacía, retroceder
+        if (state.serverPagination) {
+          if (state.skip >= state.total - 1 && state.skip > 0) {
+            state.skip = Math.max(0, state.skip - state.pageSize);
+          }
+        } else if (state.cacheAll && state.skip >= state.cacheAll.length - 1) {
+          state.skip = Math.max(0, state.skip - state.pageSize);
+        }
+        await load();
+        showToast('Eliminada', 'success');
+      } catch (e) {
+        showToast('No se pudo eliminar', 'danger');
+      }
+    }
+
+    function enableInlineEdit(span) {
+      if (span.dataset.editing === '1') return;
+      span.dataset.editing = '1';
+      span.classList.add('editing');
+
+      const id = span.dataset.id;
+      const old = span.textContent;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'form-control form-control-sm';
+      input.value = old;
+      input.style.maxWidth = '520px';
+
+      const parent = span.parentElement;
+      span.replaceWith(input);
+      input.focus();
+      input.select();
+
+      const commit = async (save) => {
+        input.replaceWith(span);
+        span.dataset.editing = '0';
+        span.classList.remove('editing');
+        if (!save) return;
+        const title = input.value.trim();
+        if (!title || title === old) { span.textContent = old; return; }
+        span.textContent = title;
+        try {
+          const item = (state.serverPagination ? state.items : (state.cacheAll || [])).find(x => x.id === id);
+          const completed = item ? !!item.completed : false;
+          await API.update(id, { title, completed });
+          await load();
+          showToast('Actualizada', 'success');
+        } catch (e) {
+          showToast('No se pudo actualizar', 'danger');
+          span.textContent = old;
+        }
+      };
+
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commit(true);
+        if (ev.key === 'Escape') commit(false);
+      });
+      input.addEventListener('blur', () => commit(true));
+    }
+
+    // ====== Eventos ======
+    $('#form-add').addEventListener('submit', onAdd);
+
+    // Delegación de eventos en la lista
+    $('#list').addEventListener('click', (ev) => {
+      const t = ev.target;
+      const btn = t.closest('button');
+      if (t.classList.contains('toggle')) {
+        onToggle(t.dataset.id);
+      } else if (btn && btn.classList.contains('del')) {
+        onDelete(btn.dataset.id);
+      } else if (btn && btn.classList.contains('edit')) {
+        const span = t.closest('li').querySelector('.task-title');
+        if (span) enableInlineEdit(span);
+      }
+    });
+    // Doble clic para editar
+    $('#list').addEventListener('dblclick', (ev) => {
+      const span = ev.target.closest('.task-title');
+      if (span) enableInlineEdit(span);
+    });
+
+    // Filtros
+    $$('input[name="filter-status"]').forEach(r =>
+      r.addEventListener('change', () => {
+        state.status = r.value === 'open' ? 'open' : r.value === 'done' ? 'done' : 'all';
+        state.skip = 0;
+        load();
+      })
+    );
+
+    // Búsqueda (debounce simple)
+    let tSearch;
+    $('#input-search').addEventListener('input', () => {
+      clearTimeout(tSearch);
+      tSearch = setTimeout(() => {
+        state.q = $('#input-search').value.trim();
+        state.skip = 0;
+        load();
+      }, 250);
+    });
+    $('#btn-clear-search').addEventListener('click', () => {
+      $('#input-search').value = '';
+      state.q = '';
+      state.skip = 0;
+      load();
+    });
+
+    // Paginación
+    $('#btn-prev').addEventListener('click', () => {
+      state.skip = Math.max(0, state.skip - state.pageSize);
+      load();
+    });
+    $('#btn-next').addEventListener('click', () => {
+      state.skip += state.pageSize;
+      load();
+    });
+
+    // Init
+    load();
+  </script>
+</body>
+</html>
