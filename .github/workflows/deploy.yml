@@ -1,0 +1,22 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches:
+      - main   # o la rama que quieras
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Stop and remove old stack
+        run: |
+          docker compose -f docker-compose.yml down || true
+          docker network prune -f || true
+
+      - name: Build and recreate
+        run: |
+          docker compose -f docker-compose.yml up -d --build
