@@ -26,7 +26,6 @@ services:
       - "8000:8000"
     volumes:
       - ./back/app:/app/app  # hot-reload en dev (ajústalo si tu estructura difiere)
-    # Asegúrate de exponer en 0.0.0.0 para que otros contenedores/host puedan acceder
     command: flask --app app.main run --host 0.0.0.0 --port 8000
     restart: unless-stopped
     networks:
