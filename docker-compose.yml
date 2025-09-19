@@ -15,8 +15,7 @@ services:
     build: ./back
     container_name: back
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     environment:
       # Como pediste IPs: apuntamos al IP del contenedor de Mongo
       MONGO_URI: mongodb://172.30.0.2:27017
