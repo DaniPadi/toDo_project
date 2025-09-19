@@ -111,7 +111,7 @@
   <script>
     // ====== Config ======
     const API = {
-      base: '/api/tasks',
+      base: 'http://181.141.41.88:8000/api/tasks',
       list: async (params = {}) => {
         const qs = new URLSearchParams(params).toString();
         const url = qs ? `${API.base}/?${qs}` : `${API.base}/`;
