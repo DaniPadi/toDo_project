@@ -1,16 +1,11 @@
 services:
   db:
-    image: mongo:7
+    image: mongo:4.4.18
     container_name: db
     ports:
       - "27017:27017"           # opcional: acceso desde host
     volumes:
       - mongodata:/data/db
-    healthcheck:
-      test: ["CMD-SHELL", "echo 'db.runCommand({ ping: 1 })' | mongosh --host localhost --quiet"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
     restart: unless-stopped
     networks:
       app_net:
@@ -20,8 +15,7 @@ services:
     build: ./back
     container_name: back
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     environment:
       # Como pediste IPs: apuntamos al IP del contenedor de Mongo
       MONGO_URI: mongodb://172.30.0.2:27017
@@ -32,7 +26,6 @@ services:
       - "8000:8000"
     volumes:
       - ./back/app:/app/app  # hot-reload en dev (ajústalo si tu estructura difiere)
-    # Asegúrate de exponer en 0.0.0.0 para que otros contenedores/host puedan acceder
     command: flask --app app.main run --host 0.0.0.0 --port 8000
     restart: unless-stopped
     networks:
@@ -49,6 +42,8 @@ services:
     volumes:
       # Proxy de /api al back por IP fija (ver nginx.conf más abajo)
       - ./front/index.html:/usr/share/nginx/html/index.html:ro
+      - ./front/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
     restart: unless-stopped
     networks:
       app_net:
@@ -64,6 +59,9 @@ networks:
       config:
         - subnet: 172.30.0.0/24
           gateway: 172.30.0.1
+
+
+
 
 
 
