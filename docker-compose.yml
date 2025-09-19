@@ -6,11 +6,6 @@ services:
       - "27017:27017"           # opcional: acceso desde host
     volumes:
       - mongodata:/data/db
-    healthcheck:
-      test: ["CMD-SHELL", "echo 'db.runCommand({ ping: 1 })' | mongosh --host localhost --quiet"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
     restart: unless-stopped
     networks:
       app_net:
