@@ -3,7 +3,7 @@ name: Deploy to Raspberry Pi
 on:
   push:
     branches:
-      - main   # o la rama que quieras
+      - master   # o la rama que quieras
 
 jobs:
   deploy:
